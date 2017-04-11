@@ -1,1 +1,14 @@
+### Python ###
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# JetBrains IDE
 .idea
+
+# VS Code
+.vscode
+
+# Distribution / packaging
+env/

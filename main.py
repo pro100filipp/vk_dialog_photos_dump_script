@@ -11,11 +11,13 @@ import json
 # argv[2] = dialog_id
 # argv[3] = person_name
 
+
 def printHelp():
-    print """
+    print("""
     Usage: python main.py <remixsid_cookie> <dialog_id> <name_of_folder>
     <dialog_id> is a string parameter "sel" in address line which you see when open a dialog
-    """
+    """)
+
 
 try:
     sys.argv[1]
@@ -23,14 +25,14 @@ except IndexError:
     printHelp()
     exit()
 
-if( sys.argv[1] == '--help' ):
+if(sys.argv[1] == '--help'):
     printHelp()
     exit()
 else:
-    if( len(sys.argv) < 4 ):
-        print """
+    if(len(sys.argv) < 4):
+        print("""
         Invalid number of arguments. Use parameter --help to know more
-        """
+        """)
         exit()
 
 remixsid_cookie = sys.argv[1]
@@ -38,31 +40,34 @@ remixsid_cookie = sys.argv[1]
 RequestData = {
     "act": "show",
     "al": 1,
-    "loc":"im",
+    "loc": "im",
     "w": "history" + sys.argv[2] + "_photo",
-    "offset" : 0,
-    "part" : 1
+    "offset": 0,
+    "part": 1
 }
 
 request_href = "http://vk.com/wkview.php"
-bound = {"count" : 10000, "offset" : 0}
+bound = {"count": 10000, "offset": 0}
 
 try:
     os.mkdir("drop_" + sys.argv[3])
 except OSError:
-    print "Проблемы с созданием папки 'drop_" + sys.argv[3] + "'"
-if( os.path.exists("drop_" + sys.argv[3]) ):
+    print("Проблемы с созданием папки 'drop_" + sys.argv[3] + "'")
+if(os.path.exists("drop_" + sys.argv[3])):
     os.chdir("drop_" + sys.argv[3])
 else:
-    print "Не удалось создать папку\n"
+    print("Не удалось создать папку\n")
     exit()
 
 test = open("links", "w")
-while( bound['offset'] < bound['count'] ):
+while(bound['offset'] < bound['count']):
     RequestData['offset'] = bound['offset']
-    content = requests.post(request_href, cookies={"remixsid": remixsid_cookie}, params=RequestData).text
-    json_data_offset = re.compile('\{"count":.+?,"offset":.+?\}').search(content)
-    bound = json.loads(content[json_data_offset.span()[0]:json_data_offset.span()[1]])
+    content = requests.post(request_href, cookies={
+                            "remixsid": remixsid_cookie}, params=RequestData).text
+    json_data_offset = re.compile(
+        '\{"count":.+?,"offset":.+?\}').search(content)
+    bound = json.loads(content[json_data_offset.span()[
+                       0]:json_data_offset.span()[1]])
     bound['count'] = int(bound['count'])
     bound['offset'] = int(bound['offset'])
 
@@ -79,5 +84,5 @@ file_num = 0
 for href in test:
     urllib.urlretrieve(href, str(file_num) + ".jpg")
     file_num += 1
-    print "Скачано " + str(file_num) + " файлов\n"
+    print("Скачано " + str(file_num) + " файлов\n")
 test.close()

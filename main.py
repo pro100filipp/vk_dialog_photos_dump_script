@@ -1,11 +1,13 @@
 # coding=utf-8
 
-import requests
+import json
+import os
 import re
 import sys
-import os
-import urllib
-import json
+
+import requests
+
+CWD = os.path.dirname(os.path.abspath(__file__))
 
 # argv[1] = remixsid_cookie
 # argv[2] = dialog_id
@@ -82,7 +84,9 @@ test.close()
 test = open("links", "r")
 file_num = 0
 for href in test:
-    urllib.urlretrieve(href, str(file_num) + ".jpg")
+    with open(os.path.join(CWD, '%d.jpg' % file_num), 'wb') as f:
+        r = requests.get(href, stream=True)
+        for chunk in r.iter_content(chunk_size=128):
+            f.write(chunk)
     file_num += 1
-    print("Скачано " + str(file_num) + " файлов\n")
 test.close()

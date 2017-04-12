@@ -1,6 +1,6 @@
 # coding=utf-8
 
-import json
+
 import os
 import re
 import sys
@@ -8,85 +8,118 @@ import sys
 import requests
 
 CWD = os.path.dirname(os.path.abspath(__file__))
-
-# argv[1] = remixsid_cookie
-# argv[2] = dialog_id
-# argv[3] = person_name
-
-
-def printHelp():
-    print("""
-    Usage: python main.py <remixsid_cookie> <dialog_id> <name_of_folder>
-    <dialog_id> is a string parameter "sel" in address line which you see when open a dialog
-    """)
+DEFAULT_FOLDER = 'photos'
+ERRORS = [
+    'remixsid',
+    'dialog_id'
+]
 
 
-try:
-    sys.argv[1]
-except IndexError:
-    printHelp()
-    exit()
+class Loader:
+    """
+    Class for loading image data
+    """
+    links = []
+    url = 'https://vk.com/wkview.php'
 
-if(sys.argv[1] == '--help'):
-    printHelp()
-    exit()
-else:
-    if(len(sys.argv) < 4):
-        print("""
-        Invalid number of arguments. Use parameter --help to know more
-        """)
-        exit()
+    def __init__(self, remixsid, dialog_id, folder_name=DEFAULT_FOLDER):
+        self._cookies = {
+            'remixsid': remixsid
+        }
+        self._count = 10000
+        self._offset = 0
+        self.data = {
+            'act': 'show',
+            'al': 1,
+            'loc': 'im',
+            'w': 'history%s_photo' % dialog_id,
+            'offset': self._offset,
+            'part': 1
 
-remixsid_cookie = sys.argv[1]
+        }
+        self.folder = os.path.join(CWD, folder_name)
 
-RequestData = {
-    "act": "show",
-    "al": 1,
-    "loc": "im",
-    "w": "history" + sys.argv[2] + "_photo",
-    "offset": 0,
-    "part": 1
-}
+    def _fetch_urls(self, save=True):
+        """
+        Fetch image urls and optionally save them to a file
+        """
+        count_pattern = r'(?<=\"count\":)\d+'
+        offset_pattern = r'(?<=\"offset\":)\d+'
+        link_pattern = r'(?<=\()https?://(cs|pp).+?(?=\))'
 
-request_href = "http://vk.com/wkview.php"
-bound = {"count": 10000, "offset": 0}
+        while self._count > self._offset:
+            r = requests.post(self.url, cookies=self._cookies, data=self.data)
+            count_match = re.search(count_pattern, r.text)
+            offset_match = re.search(offset_pattern, r.text)
+            if count_match and offset_match:
+                self._count = int(count_match[0])
+                self._offset = int(offset_match[0])
+                for link in re.finditer(link_pattern, r.text):
+                    self.links.append(link[0])
+            else:
+                break
+            self.data['offset'] = self._offset
+            print('Fetched %d links' % len(self.links), end='\r')
 
-try:
-    os.mkdir("drop_" + sys.argv[3])
-except OSError:
-    print("Проблемы с созданием папки 'drop_" + sys.argv[3] + "'")
-if(os.path.exists("drop_" + sys.argv[3])):
-    os.chdir("drop_" + sys.argv[3])
-else:
-    print("Не удалось создать папку\n")
-    exit()
+        if save:
+            with open(os.path.join(self.folder, 'links.txt'), 'w') as f:
+                for l in self.links:
+                    f.write(l + '\n')
 
-test = open("links", "w")
-while(bound['offset'] < bound['count']):
-    RequestData['offset'] = bound['offset']
-    content = requests.post(request_href, cookies={
-                            "remixsid": remixsid_cookie}, params=RequestData).text
-    json_data_offset = re.compile(
-        '\{"count":.+?,"offset":.+?\}').search(content)
-    bound = json.loads(content[json_data_offset.span()[
-                       0]:json_data_offset.span()[1]])
-    bound['count'] = int(bound['count'])
-    bound['offset'] = int(bound['offset'])
+    def get_images(self, save_links=False):
+        """
+        Download images from urls fetched
+        """
+        if not os.path.exists(self.folder):
+            os.makedirs(self.folder)
+        self._fetch_urls(save_links)
 
-    links = re.compile('&quot;http://cs.+?"').findall(content)
+        for i, l in enumerate(self.links):
+            print('Loading image %d from %d' %
+                  (i + 1, len(self.links)), end='\r')
+            r = requests.get(l, stream=True)
+            with open(os.path.join(self.folder, '%d.jpg' % i), 'wb') as f:
+                for chunk in r.iter_content(chunk_size=128):
+                    f.write(chunk)
+        print('Done! %d images downloaded.' % len(self.links))
 
-    for st in links:
-        st = st.replace("&quot;,&quot;x_&quot;:[&quot;", "")
-        test.write(st[6:st.find("&quot;", 6)] + '.jpg\n')
 
-test.close()
+def print_help():
+    """
+    Prints usage information
+    """
+    print('''
+    Usage: python main.py <remixsid> <dialog_id> <name_of_folder>
+        <remixsid> is a cookie set by vk.com
+        <dialog_id> is a string parameter "sel" in address line which you see when open a dialog
+        <name_of_folder> is a folder name, where to store data
+    ''')
+    sys.exit()
 
-test = open("links", "r")
-file_num = 0
-for href in test:
-    with open(os.path.join(CWD, '%d.jpg' % file_num), 'wb') as f:
-        r = requests.get(href, stream=True)
-        for chunk in r.iter_content(chunk_size=128):
-            f.write(chunk)
-    file_num += 1
-test.close()
+
+def print_err(number):
+    """
+    Prints arguments error
+    """
+    print('''
+        Invalid number of arguments. {err} {verb} missing.
+        Please check and run again.
+        '''.format(err=', '.join(ERRORS[number - 1:]),
+                   verb='are' if number < 2 else 'is'))
+    sys.exit()
+
+
+if __name__ == '__main__':
+    args_number = len(sys.argv)
+    if args_number == 1 or sys.argv[1] == 'help':
+        print_help()
+
+    elif args_number < 3:
+        print_err(args_number)
+
+    remixsid = sys.argv[1]
+    dialog_id = sys.argv[2]
+    folder_name = sys.argv[3] if args_number >= 4 else DEFAULT_FOLDER
+
+    loader = Loader(remixsid, dialog_id, folder_name)
+    loader.get_images()
